@@ -39,7 +39,7 @@ public class Record {
             String protocol, String url,
             String method, int status_code,
             String mime_type, int body_offset){
-        this.oid = (int) Math.round(Math.floor(Math.random() * 10.0D));
+        this.oid = (int) Math.round(Math.floor(Math.random() * 1000000.0D));
         this.request=request;
         this.response=response;
         this.host=host;

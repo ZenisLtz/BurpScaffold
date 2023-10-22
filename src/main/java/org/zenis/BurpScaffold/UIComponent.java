@@ -1,7 +1,6 @@
 package org.zenis.BurpScaffold;
 
 import burp.*;
-import org.zenis.BurpScaffold.Entity.Record;
 import org.zenis.BurpScaffold.Service.DatabaseService;
 import org.zenis.BurpScaffold.Service.RecordService;
 import org.zenis.BurpScaffold.Service.TableService;
@@ -9,8 +8,6 @@ import org.zenis.BurpScaffold.Utils.IOUtils;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.datatransfer.StringSelection;
-import java.awt.event.*;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.sql.SQLException;
@@ -18,11 +15,11 @@ import java.util.List;
 
 public class UIComponent {
 
+    private BurpExtender burpExtender;
+
     private IBurpExtenderCallbacks callbacks;
     private JPanel parentJpanel;
     private JSplitPane splitPane;
-    private JTable table;
-    private TableService tblSVC;
 
     private JLabel lbDbFile = new JLabel("(no database opened yet)");
 
@@ -39,7 +36,8 @@ public class UIComponent {
     private PrintWriter stdout;
     private OutputStream stderr;
 
-    public UIComponent(IBurpExtenderCallbacks callbacks, PrintWriter stdout, OutputStream stderr) {
+    public UIComponent(BurpExtender burpExtender, IBurpExtenderCallbacks callbacks, PrintWriter stdout, OutputStream stderr) {
+        this.burpExtender = burpExtender;
         this.callbacks = callbacks;
         this.stdout = stdout;
         this.stderr = stderr;
@@ -47,9 +45,6 @@ public class UIComponent {
         parentJpanel = new JPanel();
         parentJpanel.setLayout(new BoxLayout(parentJpanel, BoxLayout.PAGE_AXIS));
         splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-
-        table = new JTable();
-        tblSVC = new TableService(table);
 
     }
 
@@ -61,11 +56,11 @@ public class UIComponent {
         return splitPane;
     }
 
-    public TableService getTblSVC() {
-        return tblSVC;
-    }
+    public void registerGetSiteMap() {
+        RecordService rcdSVC = burpExtender.getRcdSVC();
+        TableService tblSVC = burpExtender.getTblSVC();
+        IExtensionHelpers helpers = burpExtender.getHelpers();
 
-    public void registerGetSiteMap(RecordService rcdSVC, IExtensionHelpers helpers) {
         JTextArea txtSiteUrl = new JTextArea();
         JPanel pannelGetSiteMap = new JPanel();
         pannelGetSiteMap.setLayout(new BoxLayout(pannelGetSiteMap, BoxLayout.LINE_AXIS));
@@ -90,7 +85,11 @@ public class UIComponent {
         parentJpanel.add(pannelGetSiteMap);
     }
 
-    public void registerBcontrols(BurpExtender burpExtender, DatabaseService dbSVC, RecordService rcdSVC, IMessageEditor requestViewer, IMessageEditor responseViewer) {
+    public void registerBcontrols() {
+        DatabaseService dbSVC = burpExtender.getDbSVC();
+        RecordService rcdSVC = burpExtender.getRcdSVC();
+        TableService tblSVC = burpExtender.getTblSVC();
+
         JPanel databaseControls = new JPanel();
         databaseControls.setLayout(new BoxLayout(databaseControls, BoxLayout.LINE_AXIS));
 
@@ -105,9 +104,11 @@ public class UIComponent {
                 dbSVC.ConnectDB(f.getPath());
                 rcdSVC.init(dbSVC.getConn());
 
-                table.setEnabled(true);
-                table.setModel(rcdSVC.GenarateTable());
+                tblSVC.setEnable(true);
+                tblSVC.GenarateTable(rcdSVC);
                 lbDbFile.setText(f.getPath());
+
+                btnDbClose.setEnabled(true);
                 btnDBReload.setEnabled(true);
                 btnTblClean.setEnabled(true);
                 btnTblSave.setEnabled(true);
@@ -128,6 +129,39 @@ public class UIComponent {
             }
         });
 
+        btnDbClose.setEnabled(false);
+        btnDbClose.addActionListener(event -> {
+            try {
+                int result = JOptionPane.showOptionDialog(null,
+                        new Object[] {"Are you sure to close the current database?"},
+                        "class database",
+                        JOptionPane.OK_CANCEL_OPTION,
+                        JOptionPane.QUESTION_MESSAGE,
+                        null,
+                        null,
+                        null);
+                if (result != JOptionPane.OK_OPTION) {
+                    return;
+                }
+                dbSVC.DisconnectDB();
+                tblSVC.cleanTable(rcdSVC);
+
+                btnDbSelect.setEnabled(true);
+                btnDbClose.setEnabled(false);
+                btnDBReload.setEnabled(false);
+                btnTblClean.setEnabled(false);
+                btnTblSave.setEnabled(false);
+                btnDBClean.setEnabled(false);
+                btnTblReset.setEnabled(false);
+                btnURLExport.setEnabled(false);
+
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            lbDbFile.setText("(no database opened yet)");
+
+        });
+
         btnTblClean.setEnabled(false);
         btnTblClean.addActionListener(event -> {
             try {
@@ -141,7 +175,7 @@ public class UIComponent {
         btnTblSave.addActionListener(event -> {
             try {
                 int result = JOptionPane.showOptionDialog(null,
-                        new Object[] {"Are you sure to do save current table?"},
+                        new Object[] {"Are you sure to save current table?"},
                         "Save current table to database",
                         JOptionPane.OK_CANCEL_OPTION,
                         JOptionPane.QUESTION_MESSAGE,
@@ -160,7 +194,7 @@ public class UIComponent {
         btnDBClean.addActionListener(event -> {
             try {
                 int result = JOptionPane.showOptionDialog(null,
-                        new Object[] {"Are you sure to do clean current database?"},
+                        new Object[] {"Are you sure to clean current database?"},
                         "Clean current database",
                         JOptionPane.OK_CANCEL_OPTION,
                         JOptionPane.QUESTION_MESSAGE,
@@ -213,7 +247,7 @@ public class UIComponent {
                         String output = outputpathfield.getText();
                         File outputFile = new File(output);
                         if (outputFile.isDirectory()){
-                            if (outputfinal.endsWith("\\") || outputfinal.endsWith("/")) outputfinal=output+"output.txt";
+                            if (output.endsWith("\\") || output.endsWith("/")) outputfinal=output+"output.txt";
                             else  outputfinal=output+"/output.txt";
                         } else if(!outputFile.exists()){
                             outputFile.createNewFile();
@@ -242,6 +276,8 @@ public class UIComponent {
         databaseControls.add(Box.createRigidArea(new Dimension(10, 0)));
         databaseControls.add(btnDbSelect);
         databaseControls.add(Box.createRigidArea(new Dimension(10, 0)));
+        databaseControls.add(btnDbClose);
+        databaseControls.add(Box.createRigidArea(new Dimension(10, 0)));
         databaseControls.add(btnDBReload);
         databaseControls.add(Box.createRigidArea(new Dimension(10, 0)));
         databaseControls.add(btnDBClean);
@@ -255,59 +291,18 @@ public class UIComponent {
         databaseControls.add(btnURLExport);
         parentJpanel.add(databaseControls);
 
-        table.getSelectionModel().addListSelectionListener(burpExtender);
-        table.addMouseListener(new MouseAdapter() {
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) showTablePopup(e, rcdSVC);
-            }
-
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) showTablePopup(e, rcdSVC);
-            }
-        });
-        table.setAutoCreateRowSorter(true);
-        table.setEnabled(false);
+        JTable table = tblSVC.init(callbacks, rcdSVC);
 
         JTabbedPane tabs = new JTabbedPane();
         splitPane.setTopComponent(new JScrollPane(table));
         splitPane.setBottomComponent(tabs);
 
-        tabs.addTab("Request", requestViewer.getComponent());
-        tabs.addTab("Response", responseViewer.getComponent());
+        tabs.addTab("Request", tblSVC.getRequestViewer().getComponent());
+        tabs.addTab("Response", tblSVC.getResponseViewer().getComponent());
 
     }
 
-    private static void addToPopup(JPopupMenu pm, String title, ActionListener al) {
-        final JMenuItem mi = new JMenuItem(title);
-        mi.addActionListener(al);
-        pm.add(mi);
-    }
 
-    private void showTablePopup(MouseEvent e, RecordService rcdSVC) {
-        JPopupMenu pm = new JPopupMenu();
-        if (pm.getComponentCount() != 0) pm.addSeparator();
 
-        addToPopup(pm, "copy url", event -> {
-            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(tblSVC.getSelectedRcd(rcdSVC).getUrl()), null);
-        });
-        addToPopup(pm, "delete this Record", event -> rcdSVC.deleteRecord(tblSVC.getSelectedRcd(rcdSVC)));
-//        addToPopup(pm, "Hide this Record", event -> rcdSVC.hideRecord(tblSVC.getSelectedRcd(rcdSVC)));
-        addToPopup(pm, "Send request to Comparer", event -> callbacks.sendToComparer(tblSVC.getSelectedRcd(rcdSVC).getRequest().getBytes()));
-        addToPopup(pm, "Send response to Comparer", event -> callbacks.sendToComparer(tblSVC.getSelectedRcd(rcdSVC).getResponse().getBytes()));
-        addToPopup(pm, "Send request to Repeater", event -> {
-            Record rcd = tblSVC.getSelectedRcd(rcdSVC);
-            boolean ishttps = false;
-            if ("https".equals(rcd.getProtocol())) {
-                ishttps = true;
-            }
-            callbacks.sendToRepeater(
-                    rcd.getHost(),
-                    rcd.getPort(),
-                    ishttps,
-                    rcd.getRequest().getBytes(),
-                    null);
-        });
 
-        pm.show(e.getComponent(), e.getX(), e.getY());
-    }
 }

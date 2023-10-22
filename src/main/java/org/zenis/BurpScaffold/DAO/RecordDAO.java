@@ -44,7 +44,7 @@ public class RecordDAO {
         deleteBuilder.delete();
     }
 
-    public void createRecord(List<Record> rcdlist) throws SQLException {
+    public void createRecords(List<Record> rcdlist) throws SQLException {
         for(Record rcd: rcdlist) {
             recordDao.createOrUpdate(rcd);
         }

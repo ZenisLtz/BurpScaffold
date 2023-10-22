@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 import static org.zenis.BurpScaffold.Utils.AlgUtils.subList2Integer;
 
 public class RecordService {
+    BurpExtender burpExtender;
     private List<Integer> idList = new ArrayList<Integer>();
     private List<Integer> delCacheList = new ArrayList<Integer>();
     private List<Record> recordList = new ArrayList<Record>();
@@ -36,6 +37,10 @@ public class RecordService {
     }
 
     private RecordDAO rcdDAO;
+
+    public static List<Field> getRecordFields() {
+        return recordFields;
+    }
 
     public RecordDAO getRcdDAO() {
         return rcdDAO;
@@ -55,7 +60,9 @@ public class RecordService {
         return fieldList;
     }
 
-    public RecordService(){}
+    public RecordService(BurpExtender burpExtender){
+        this.burpExtender = burpExtender;
+    }
 
     public void init(ConnectionSource conn) throws SQLException {
         rcdDAO = new RecordDAO(conn);
@@ -162,7 +169,7 @@ public class RecordService {
     }
 
     public void saveDB() throws SQLException {
-        rcdDAO.createRecord(recordList);
+        rcdDAO.createRecords(recordList);
         for (Integer oid:delCacheList) {
             rcdDAO.deleteRecord(oid);
         }
@@ -182,49 +189,6 @@ public class RecordService {
             recordList.get(i).setId(i);
         }
     }
-
-    public AbstractTableModel GenarateTable(){
-        return new AbstractTableModel(){
-            @Override
-            public int getRowCount() {
-                return idList.size();
-            }
-
-            @Override
-            public int getColumnCount() {
-                return recordFields.size();
-            }
-
-            @Override
-            public String getColumnName(int colindex) {
-                return recordFields.get(colindex).getName();
-            }
-
-            @Override
-            public Class<?> getColumnClass(int colindex) {
-                return recordFields.get(colindex).getClass();
-            }
-
-            @Override
-            public Object getValueAt(int rowIndex, int colindex) {
-                Field column = recordFields.get(colindex);
-                column.setAccessible(true);
-                Object retobj=null;
-                Record rcd = getRcdByID(idList.get(rowIndex));
-                if (rcd==null) {
-                    return null;
-                }
-                try {
-                    retobj = column.get(rcd);
-                } catch (IllegalAccessException e) {
-                    e.printStackTrace();
-                    return null;
-                }
-                return retobj;
-            }
-        };
-    }
-
     public void insertRequestResponse(IHttpRequestResponse messageInfo, IExtensionHelpers helpers) throws SQLException {
         if (messageInfo.getResponse() == null) return;
         IHttpService hs = messageInfo.getHttpService();

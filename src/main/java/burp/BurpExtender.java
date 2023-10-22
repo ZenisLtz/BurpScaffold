@@ -4,6 +4,7 @@ import org.zenis.BurpScaffold.*;
 import org.zenis.BurpScaffold.Entity.Record;
 import org.zenis.BurpScaffold.Service.DatabaseService;
 import org.zenis.BurpScaffold.Service.RecordService;
+import org.zenis.BurpScaffold.Service.TableService;
 import org.zenis.BurpScaffold.Utils.IOUtils;
 
 import java.awt.*;
@@ -11,11 +12,9 @@ import java.io.*;
 import java.sql.SQLException;
 import java.util.*;
 import javax.swing.*;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
 
 public class BurpExtender extends JPanel implements IBurpExtender, ITab,
-		IExtensionStateListener, IHttpListener, IContextMenuFactory, ListSelectionListener, IMessageEditorController {
+		IExtensionStateListener, IHttpListener, IContextMenuFactory, IMessageEditorController {
 
 	private static final String  progName="BurpScaffold";
 	private static final String  author="zenis <sy5323@126.com>";
@@ -23,15 +22,12 @@ public class BurpExtender extends JPanel implements IBurpExtender, ITab,
 	private IExtensionHelpers helpers;
 
 	private UIComponent uicomponent;
-	private IMessageEditor requestViewer, responseViewer;
-	private RecordService rcdSVC = new RecordService();
+	private RecordService rcdSVC = new RecordService(this);
 	private DatabaseService dbSVC = new DatabaseService();
+	private TableService tblSVC = new TableService(this);
 
 	private PrintWriter stdout;
 	private OutputStream stderr;
-
-
-
 	@Override
 	public void registerExtenderCallbacks(IBurpExtenderCallbacks callbacks) {
 		callbacks.setExtensionName("Burp Scaffold");
@@ -44,17 +40,15 @@ public class BurpExtender extends JPanel implements IBurpExtender, ITab,
 		this.stdout = new PrintWriter(callbacks.getStdout(), true);
 		this.stderr = callbacks.getStderr();
 
-		requestViewer = callbacks.createMessageEditor(this, false);
-		responseViewer = callbacks.createMessageEditor(this, false);
+		this.stdout.println("Welcome to use BurpScaffold!");
 
-		uicomponent = new UIComponent(callbacks, stdout, stderr);
-		uicomponent.registerGetSiteMap(rcdSVC, helpers);
-		uicomponent.registerBcontrols(this, dbSVC, rcdSVC, requestViewer, responseViewer);
+		uicomponent = new UIComponent(this, callbacks, stdout, stderr);
+		uicomponent.registerGetSiteMap();
+		uicomponent.registerBcontrols();
 
 		setLayout(new BorderLayout());
 		add(uicomponent.getParentJpanel(), BorderLayout.NORTH);
 		add(uicomponent.getSplitPane(), BorderLayout.CENTER);
-
 
 	}
 
@@ -64,9 +58,11 @@ public class BurpExtender extends JPanel implements IBurpExtender, ITab,
 
 	@Override public void processHttpMessage(int toolFlag, boolean messageIsRequest, IHttpRequestResponse messageInfo){}
 
-	@Override public void extensionUnloaded() {
+	@Override
+	public void extensionUnloaded() {
 		try {
 			dbSVC.DisconnectDB();
+			tblSVC.cleanTable(rcdSVC);
 		} catch (Exception e) {
 			IOUtils.reportError(BurpExtender.this, stderr, e, "Couldn't close database");
 		}
@@ -97,14 +93,8 @@ public class BurpExtender extends JPanel implements IBurpExtender, ITab,
 	private static final byte[] EMPTY_BYTE_ARRAY = {};
 
 	@Override
-	public void valueChanged(ListSelectionEvent e) {
-		requestViewer.setMessage(getRequest(), true);
-		responseViewer.setMessage(getResponse(), false);
-	}
-
-	@Override
 	public IHttpService getHttpService() {
-		Record rcd = rcdSVC.getRcdByID(uicomponent.getTblSVC().getSelectedId());
+		Record rcd = rcdSVC.getRcdByID(tblSVC.getSelectedId());
 		if (rcd == null) return null;
 		return new IHttpService() {
 			public String  getHost() { return rcd.getHost(); }
@@ -115,16 +105,40 @@ public class BurpExtender extends JPanel implements IBurpExtender, ITab,
 
 	@Override
 	public byte[] getRequest() {
-		Record rcd = rcdSVC.getRcdByID(uicomponent.getTblSVC().getSelectedId());
+		Record rcd = rcdSVC.getRcdByID(tblSVC.getSelectedId());
 		if (rcd == null) return EMPTY_BYTE_ARRAY;
 		return rcd.getRequest().getBytes();
 	}
 
 	@Override
 	public byte[] getResponse() {
-		Record rcd = rcdSVC.getRcdByID(uicomponent.getTblSVC().getSelectedId());
+		Record rcd = rcdSVC.getRcdByID(tblSVC.getSelectedId());
 		if (rcd == null) return EMPTY_BYTE_ARRAY;
 		return rcd.getResponse().getBytes();
+	}
+
+	public PrintWriter getStdout() {
+		return stdout;
+	}
+
+	public OutputStream getStderr() {
+		return stderr;
+	}
+
+	public TableService getTblSVC() {
+		return tblSVC;
+	}
+
+	public RecordService getRcdSVC() {
+		return rcdSVC;
+	}
+
+	public DatabaseService getDbSVC() {
+		return dbSVC;
+	}
+
+	public IExtensionHelpers getHelpers() {
+		return helpers;
 	}
 }
 
